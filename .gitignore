@@ -1,0 +1,5 @@
+ProjectPlan.md
+poetry.lock
+__pycache__/
+.*
+!.gitignore
