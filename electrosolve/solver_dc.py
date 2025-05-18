@@ -1,5 +1,11 @@
 import numpy as np
 from .circuit import Circuit, Resistor, VoltageSourceDC, CurrentSourceDC
+import sympy
+from .symbolic_handler import (
+    create_node_voltage_symbols,
+    create_component_value_symbols,
+)
+
 
 def solve_dc_circuit(circuit: Circuit):
     if circuit.ground_node is None:
@@ -148,3 +154,167 @@ def solve_dc_circuit(circuit: Circuit):
     # print("Solved Node Voltages:", circuit.solved_node_voltages) # For debugging
     # for comp in circuit.components: # For debugging
     #     print(f"Component {comp.id}: V={comp.voltage}, I={comp.current}")
+
+
+def get_symbolic_voltage_for_node(
+    node_name: str,
+    circuit_ground_node: str | None,
+    defined_node_voltages_map: dict[str, sympy.Expr]
+) -> sympy.Expr:
+    """
+    Returns the symbolic voltage expression for a given node.
+    - Ground node is 0.
+    - Nodes fixed by voltage sources use their source's symbolic value.
+    - Other non-ground nodes use their generic V_Node symbol.
+    """
+    if node_name == circuit_ground_node:
+        return sympy.Integer(0)
+    
+    if node_name in defined_node_voltages_map:
+        return defined_node_voltages_map[node_name]
+    else:
+        # This should ideally not be reached if defined_node_voltages_map is pre-populated correctly
+        # with all non-ground node symbols (like V_N1, V_N2 etc.)
+        # or if node_name is ground (handled above).
+        raise KeyError(f"Symbolic voltage for node '{node_name}' not found in internal map. "
+                       "Ensure it's a non-ground node or properly handled as ground.")
+
+
+def formulate_symbolic_dc_equations(circuit: Circuit) -> tuple[
+    dict[str, sympy.Eq],         # Node name to KCL Equation (for unknown nodes)
+    dict[str, sympy.Eq],         # Node name to Explicit Voltage Definition (e.g. V_N1 = V_S1)
+    dict[str, sympy.Symbol],     # Node name to original V_Node symbol (all non-ground)
+    dict[str, sympy.Symbol]      # Component ID to component value symbol
+    ]:
+    """
+    Formulates symbolic KCL equations for a DC circuit based on standard Nodal Analysis.
+
+    Returns:
+        - kcl_equations_for_unknowns: Dict mapping node names (whose voltages are unknown) to their KCL sympy.Eq.
+        - explicit_voltage_definitions: Dict mapping node names (fixed by sources) to their definition Eq (e.g. V_N1 = V_S1).
+        - base_node_voltage_symbols: Dict of all non-ground node base voltage symbols (e.g., V_N1).
+        - component_value_symbols: Dict of all component value symbols (e.g., R_R1).
+    """
+    if circuit.ground_node is None:
+        raise ValueError("Circuit must have a ground node set for symbolic formulation.")
+    if not circuit.node_map and (circuit.nodes - {circuit.ground_node}):
+        # Node map is essential. Try to build if not present but nodes exist.
+        try:
+            print("Symbolic formulation: Node map not found, attempting to build...")
+            circuit.build_node_map()
+            if not circuit.node_map and (circuit.nodes - {circuit.ground_node}): # Check again
+                raise ValueError("Node map is still empty despite non-ground nodes present.")
+        except ValueError as e:
+            raise ValueError(f"Error building node map before symbolic formulation: {e}")
+    
+    # Handle cases like only ground node or empty circuit
+    if not circuit.node_map:
+        return {}, {}, {}, {}
+
+    base_node_voltage_symbols = create_node_voltage_symbols(circuit)
+    component_value_symbols = create_component_value_symbols(circuit)
+
+    # This map will store the actual symbolic expression to use for each node's voltage.
+    # Initially, it's the base V_NodeX symbol for all non-ground nodes.
+    # It gets updated if a node's voltage is fixed by a source.
+    effective_node_voltage_expr_map: dict[str, sympy.Expr] = {
+        name: sym for name, sym in base_node_voltage_symbols.items()
+    }
+
+    explicit_voltage_definitions: dict[str, sympy.Eq] = {}
+
+    # Step 1: Identify nodes fixed by grounded voltage sources
+    for comp in circuit.components:
+        if isinstance(comp, VoltageSourceDC):
+            n_pos, n_neg = comp.nodes[0], comp.nodes[1]
+            source_val_sym = component_value_symbols[comp.id]
+            
+            is_n_pos_ground = (n_pos == circuit.ground_node)
+            is_n_neg_ground = (n_neg == circuit.ground_node)
+
+            target_node_name: str | None = None
+            voltage_expression: sympy.Expr | None = None
+
+            if not is_n_pos_ground and is_n_neg_ground:
+                target_node_name = n_pos
+                voltage_expression = source_val_sym
+            elif not is_n_neg_ground and is_n_pos_ground:
+                target_node_name = n_neg
+                voltage_expression = -source_val_sym
+            elif not is_n_pos_ground and not is_n_neg_ground:
+                raise NotImplementedError(
+                    f"Floating voltage source {comp.id} ({n_pos}-{n_neg}) is not supported "
+                    "for this symbolic KCL formulation (requires MNA)."
+                )
+            # If both are ground, no non-ground node voltage is defined by this source.
+
+            if target_node_name and voltage_expression is not None:
+                if target_node_name not in base_node_voltage_symbols:
+                    # This implies a VSource is connected to a node not otherwise in the circuit,
+                    # or the node_map is incomplete.
+                    raise ValueError(f"Voltage source {comp.id} connects to '{target_node_name}', "
+                                     "which is not in the set of non-ground nodes. Circuit definition error.")
+
+                # Check for conflicting definitions
+                current_expr = effective_node_voltage_expr_map.get(target_node_name)
+                base_sym = base_node_voltage_symbols.get(target_node_name)
+                if current_expr != base_sym and current_expr is not None: # Already defined by another source
+                     print(f"Warning: Voltage for node '{target_node_name}' (currently {current_expr}) "
+                           f"is being redefined by source '{comp.id}' to {voltage_expression}.")
+
+                effective_node_voltage_expr_map[target_node_name] = voltage_expression
+                explicit_voltage_definitions[target_node_name] = sympy.Eq(
+                    base_node_voltage_symbols[target_node_name], voltage_expression
+                )
+
+    # Step 2: Formulate KCL for each non-ground node whose voltage is NOT explicitly defined by a source
+    kcl_equations_for_unknowns: dict[str, sympy.Eq] = {} 
+    
+    for node_k_name in circuit.node_map.keys():
+        if node_k_name in explicit_voltage_definitions:
+            # This node's voltage is already defined by a source.
+            # Standard Nodal Analysis does not write a KCL *to solve for this node's voltage*.
+            continue
+
+        current_sum_at_node_k = sympy.Integer(0)
+
+        for comp in circuit.components:
+            if node_k_name not in comp.nodes:
+                # Component not connected to the current KCL node
+                continue
+
+            n1_name, n2_name = comp.nodes[0], comp.nodes[1]
+            comp_val_sym = component_value_symbols[comp.id]
+
+            v1_sym_expr = get_symbolic_voltage_for_node(n1_name, circuit.ground_node, effective_node_voltage_expr_map)
+            v2_sym_expr = get_symbolic_voltage_for_node(n2_name, circuit.ground_node, effective_node_voltage_expr_map)
+
+            if isinstance(comp, Resistor):
+                # Current leaving node_k_name
+                if n1_name == node_k_name: 
+                    current_sum_at_node_k += (v1_sym_expr - v2_sym_expr) / comp_val_sym
+                elif n2_name == node_k_name:
+                    current_sum_at_node_k += (v2_sym_expr - v1_sym_expr) / comp_val_sym
+            
+            elif isinstance(comp, CurrentSourceDC):
+                # Positive comp_val_sym means current flows n1->n2 through source.
+                # KCL: sum of currents leaving node_k_name = 0.
+                if n1_name == node_k_name: # Current leaves node_k_name via the source's n1 terminal
+                    current_sum_at_node_k += comp_val_sym 
+                elif n2_name == node_k_name: # Current enters node_k_name via the source's n2 terminal
+                    current_sum_at_node_k -= comp_val_sym
+            
+            elif isinstance(comp, VoltageSourceDC):
+                # Effect of grounded VSources is already incorporated via effective_node_voltage_expr_map.
+                # They don't contribute a separate current term here in this Nodal formulation.
+                # Floating VSources would have raised an error.
+                pass
+
+        kcl_equations_for_unknowns[node_k_name] = sympy.Eq(current_sum_at_node_k, 0)
+    
+    return (
+        kcl_equations_for_unknowns,
+        explicit_voltage_definitions,
+        base_node_voltage_symbols,
+        component_value_symbols
+    )
