@@ -1,0 +1,23 @@
+{
+  "components": [
+    {
+      "id": "Vs1",
+      "type": "voltagesourcedc",
+      "value": 9.0,
+      "nodes": ["N1", "GND"]
+    },
+    {
+      "id": "R1",
+      "type": "resistor",
+      "value": 1000.0,
+      "nodes": ["N1", "N2"]
+    },
+    {
+      "id": "R2",
+      "type": "resistor",
+      "value": 2000.0,
+      "nodes": ["N2", "GND"]
+    }
+  ],
+  "ground_node": "GND"
+}
