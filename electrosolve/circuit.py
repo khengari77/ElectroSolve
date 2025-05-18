@@ -1,4 +1,5 @@
 import numpy as np
+import sympy
 
 
 class Component:
@@ -122,6 +123,15 @@ class Circuit:
         for comp in self.components:
             if comp.id == component_id:
                 return comp
+        return None
+
+    def get_component_by_symbol(self, target_symbol: sympy.Symbol, component_value_symbols: dict[str, sympy.Symbol]) -> Component | None:
+        """
+        Retrieves a component whose value symbol matches the target_symbol.
+        """
+        for comp_id, sym in component_value_symbols.items():
+            if sym == target_symbol:
+                return self.get_component(comp_id)
         return None
 
     def __repr__(self):
