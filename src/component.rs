@@ -1,10 +1,13 @@
 use num_complex::Complex64;
 use crate::units::{Resistance, Inductance, Capacitance, Voltage, Current, AngularFrequency};
+use crate::errors::CircuitError;
 
+#[derive(Debug, Clone)]
 pub enum ComponentKind {
     Resistor {r: Resistance},
     Inductor  {l: Inductance},
     Capacitor {c: Capacitance},
+    Impedance {z: Complex64},
     VoltageSource {v: Voltage},
     CurrentSource {i: Current},
 }
@@ -22,16 +25,26 @@ impl ComponentKind {
                     Complex64::new(0.0, -1.0 / (omega_val * f64::from(*c)))
                 }
             },
+            Self::Impedance {z} => *z,
             Self::VoltageSource {..} | Self::CurrentSource {..} => Complex64::new(0.0, 0.0)
         }
     }
 
     pub fn is_passive(&self) -> bool {
-        matches!(self, Self::Resistor {..} | Self::Inductor {..} | Self::Capacitor {..})
+        matches!(self, Self::Resistor {..} | Self::Inductor {..} | Self::Capacitor {..} | Self::Impedance {..})
     }
 
     pub fn is_source(&self) -> bool {
         matches!(self, Self::VoltageSource {..} | Self::CurrentSource {..})
     }
+
 }
 
+pub fn impedance_to_kind(z: Complex64) -> Result<ComponentKind, CircuitError> {
+    const EPSILON: f64 = 1e-12;
+    if z.im.abs() < EPSILON {
+        Resistance::new(z.re).map(|r| ComponentKind::Resistor { r })
+    } else {
+        Ok(ComponentKind::Impedance { z })
+    }
+}

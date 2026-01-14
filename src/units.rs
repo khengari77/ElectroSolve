@@ -13,7 +13,7 @@ impl AngularFrequency {
     }
 
     pub fn from_hz(freq: f64) -> Self {
-        Self(2.0 * std::f64::consts::PI * freq.max(0.0))
+        Self(2.0 * std::f64::consts::PI * freq)
     }
 }
 

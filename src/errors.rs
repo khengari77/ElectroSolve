@@ -1,4 +1,7 @@
 use thiserror::Error;
+use num_complex::Complex64;
+
+// TODO: Redesign error handling
 
 #[derive(Debug, Error)]
 pub enum CircuitError {
@@ -10,12 +13,17 @@ pub enum CircuitError {
     InvalidInductance(f64),
     #[error("Invalid capacitance: {0} F (must be > 0 and finite)")]
     InvalidCapacitance(f64),
-    #[error("Unknown component type: {0}")]
-    UnknownComponentType(String),
-    #[error("Invalid SI suffix: {0}")]
-    InvalidSuffix(String),
+    #[error("Invalid impedance: {0} Ω (must be > 0 and finite)")]
+    InvalidImpedance(Complex64),
 }
 
 #[derive(Debug, Error)]
 #[error("Parse error on line {line}: {message}")]
-pub struct ParseError { line: usize, message: String }
+pub struct ParseError { pub line: usize, pub message: String }
+
+impl From<CircuitError> for ParseError {
+    fn from(value: CircuitError) -> Self {
+        // FIXME: This is temporary. We need proprer line number reporting.
+        Self { line: 0, message: format!("{}", value) }
+    }
+}
