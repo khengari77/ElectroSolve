@@ -15,6 +15,10 @@ pub enum CircuitError {
     InvalidCapacitance(f64),
     #[error("Invalid impedance: {0} Ω (must be > 0 and finite)")]
     InvalidImpedance(Complex64),
+    #[error("Circuit is open - cannot compute impedance")]
+    OpenCircuit,
+    #[error("Circuit is shorted - division by zero")]
+    ShortCircuit,
 }
 
 #[derive(Debug, Error)]

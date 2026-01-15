@@ -1,7 +1,39 @@
 use num_complex::Complex64;
 use crate::errors::CircuitError;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub enum Value<T> {
+    Known(T),
+    Unknown(String),
+}
+
+impl<T> Value<T> {
+    pub fn new(value: T) -> Self {
+        Self::Known(value)
+    }
+
+    pub fn unknown(name: String) -> Self {
+        Self::Unknown(name)
+    }
+
+    pub fn is_known(&self) -> bool {
+        matches!(self, Self::Known(_))
+    }
+
+    pub fn is_unknown(&self) -> bool {
+        matches!(self, Self::Unknown(_))
+    }
+
+    pub fn unwrap_known(&self) -> &T {
+        match self {
+            Self::Known(value) => value,
+            Self::Unknown(_) => panic!("unwrap_known called on unknown value"),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AngularFrequency(f64);
 
 impl AngularFrequency {
@@ -12,7 +44,7 @@ impl AngularFrequency {
         }
     }
 
-    pub fn from_hz(freq: f64) -> Self {
+    pub fn hz(freq: f64) -> Self {
         Self(2.0 * std::f64::consts::PI * freq)
     }
 }
@@ -23,58 +55,103 @@ impl From<AngularFrequency> for f64 {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Resistance(f64);
+#[derive(Debug, Clone, PartialEq)]
+pub struct Resistance(pub Value<f64>);
 
 impl Resistance {
-    pub fn new(r: f64) -> Result<Self, CircuitError> {
+    pub fn known(r: f64) -> Result<Self, CircuitError> {
         match r > 0.0 && r.is_finite() {
-            true => Ok(Self(r)),
+            true => Ok(Self(Value::Known(r))),
             false => Err(CircuitError::InvalidResistance(r)),
         }
     }
-}
 
-impl From<Resistance> for f64 {
-    fn from(value: Resistance) -> f64 {
-        value.0
+    pub fn unknown(name: String) -> Self {
+        Self(Value::Unknown(name))
+    }
+    
+    pub fn is_known(&self) -> bool {
+        self.0.is_known()
+    }
+    
+    pub fn is_unknown(&self) -> bool {
+        self.0.is_unknown()
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Inductance(f64);
+impl From<Resistance> for Option<f64> {
+    fn from(value: Resistance) -> Self {
+        match value.0 {
+            Value::Known(r) => Some(r),
+            Value::Unknown(_) => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Inductance(pub Value<f64>);
 
 impl Inductance {
-    pub fn new(l: f64) -> Result<Self, CircuitError> {
+    pub fn known(l: f64) -> Result<Self, CircuitError> { 
         match l > 0.0 && l.is_finite() {
-            true => Ok(Self(l)),
+            true => Ok(Self(Value::Known(l))),
             false => Err(CircuitError::InvalidInductance(l)),
         }
     }
-}
 
-impl From<Inductance> for f64 {
-    fn from(value: Inductance) -> f64 {
-        value.0
+    pub fn unknown(name: String) -> Self {
+        Self(Value::Unknown(name))
+    }
+    
+    pub fn is_known(&self) -> bool {
+        self.0.is_known()
+    }
+    
+    pub fn is_unknown(&self) -> bool {
+        self.0.is_unknown()
     }
 }
- 
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct Capacitance(f64);
-
-impl Capacitance {
-    pub fn new(c: f64) -> Result<Self, CircuitError> {
-        match c > 0.0 && c.is_finite() {
-            true => Ok(Self(c)),
-            false => Err(CircuitError::InvalidCapacitance(c)),
+impl From<Inductance> for Option<f64> {
+    fn from(value: Inductance) -> Self {
+        match value.0 {
+            Value::Known(l) => Some(l),
+            Value::Unknown(_) => None,
         }
     }
 }
 
-impl From<Capacitance> for f64 {
-    fn from(value: Capacitance) -> f64 {
-        value.0
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Capacitance(pub Value<f64>);
+
+impl Capacitance {
+    pub fn known(c: f64) -> Result<Self, CircuitError> {  
+        match c > 0.0 && c.is_finite() {
+            true => Ok(Self(Value::Known(c))),
+            false => Err(CircuitError::InvalidCapacitance(c)),
+        }
+    }
+
+    pub fn unknown(name: String) -> Self {
+        Self(Value::Unknown(name))
+    }
+    
+    pub fn is_known(&self) -> bool {
+        self.0.is_known()
+    }
+    
+    pub fn is_unknown(&self) -> bool {
+        self.0.is_unknown()
+    }
+}
+
+impl From<Capacitance> for Option<f64> {
+    fn from(value: Capacitance) -> Self {
+        match value.0 {
+            Value::Known(c) => Some(c),
+            Value::Unknown(_) => None,
+        }
     }
 }
 
@@ -120,4 +197,124 @@ impl Into<Complex64> for Current {
     fn into(self) -> Complex64 {
         self.0
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImpedanceResult {
+    Finite(Complex64),
+    Open,
+    Short,
+}
+impl ImpedanceResult {
+    pub fn is_finite(&self) -> bool { matches!(self, Self::Finite(..)) }
+    pub fn is_open(&self) -> bool { matches!(self, Self::Open) }
+    pub fn is_short(&self) -> bool { matches!(self, Self::Short) }
+}
+
+
+pub fn combine_series(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceResult {
+    match (&z1, &z2) {
+        (ImpedanceResult::Open, _) | (_, ImpedanceResult::Open) => {
+            ImpedanceResult::Open
+        }
+        
+        (ImpedanceResult::Finite(z1_val), ImpedanceResult::Short)  => { 
+            ImpedanceResult::Finite(*z1_val)
+        }
+        
+        (ImpedanceResult::Short, ImpedanceResult::Finite(z2_val))  => { 
+            ImpedanceResult::Finite(*z2_val)
+        }
+
+        (ImpedanceResult::Short, ImpedanceResult::Short) => {
+            ImpedanceResult::Short
+        }
+        
+        (ImpedanceResult::Finite(z1_val), ImpedanceResult::Finite(z2_val)) => {
+            ImpedanceResult::Finite(z1_val + z2_val)
+        }
+    }
+}
+
+pub fn combine_parallel(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceResult {
+    match (&z1, &z2) {
+        (ImpedanceResult::Short, _) | (_, ImpedanceResult::Short) => {
+            ImpedanceResult::Short
+        }
+        
+        (ImpedanceResult::Finite(z1_val), ImpedanceResult::Open) => {
+            ImpedanceResult::Finite(*z1_val)
+        }
+        (ImpedanceResult::Open, ImpedanceResult::Finite(z2_val)) => {
+            ImpedanceResult::Finite(*z2_val)
+        }
+        (ImpedanceResult::Open, ImpedanceResult::Open) => {
+            ImpedanceResult::Open
+        }
+        
+        (ImpedanceResult::Finite(z1_val), ImpedanceResult::Finite(z2_val)) => {
+            let admittance_sum = 1.0 / z1_val + 1.0 / z2_val;
+            ImpedanceResult::Finite(1.0 / admittance_sum)
+        }
+    }
+}
+
+pub fn combine_parallel_many(impedances: &[ImpedanceResult]) -> ImpedanceResult {
+    // Rule 1: Any Short dominates parallel
+    if impedances.iter().any(|z| z.is_short()) {
+        return ImpedanceResult::Short;
+    }
+    
+    // Rule 2: Filter out Open (zero admittance)
+    let finite_vals: Vec<Complex64> = impedances
+        .iter()
+        .filter_map(|z| match z {
+            ImpedanceResult::Finite(v) => Some(v),
+            _ => None,  // Skip Open
+        })
+        .cloned()
+        .collect();
+    
+    // Rule 3: If all were Open, result is Open
+    if finite_vals.is_empty() {
+        return ImpedanceResult::Open;
+    }
+    
+    // Rule 4: Calculate parallel impedance
+    let admittance_sum: Complex64 = finite_vals
+        .iter()
+        .map(|z| 1.0 / z)  // Y = 1/Z
+        .sum();
+    
+    ImpedanceResult::Finite(1.0 / admittance_sum)
+}
+
+pub fn combine_series_many(impedances: &[ImpedanceResult]) -> ImpedanceResult {
+    // Rule 1: Any Open breaks series
+    if impedances.iter().any(|z| z.is_open()) {
+        return ImpedanceResult::Open;
+    }
+    
+    // Filter out Short (add zero impedance)
+    let finite_vals: Vec<Complex64> = impedances
+        .iter()
+        .filter_map(|z| match z {
+            ImpedanceResult::Finite(v) => Some(v),
+            ImpedanceResult::Short => None,  // Skip Short
+            _ => None,
+        })
+        .cloned()
+        .collect();
+    
+    // If all were Open (shouldn't happen given first check, but defensive)
+    if finite_vals.is_empty() {
+        return ImpedanceResult::Open;
+    }
+    
+    // Rule 2: Sum all finite values
+    let z_sum: Complex64 = finite_vals
+        .iter()
+        .sum();
+    
+    ImpedanceResult::Finite(z_sum)
 }

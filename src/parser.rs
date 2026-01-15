@@ -69,9 +69,9 @@ pub fn parse_component_line(
     let value = parse_value(tokens[3], line_num)?;
 
     let kind = match first_char {
-        'R' => ComponentKind::Resistor { r: Resistance::new(value)? },
-        'L' => ComponentKind::Inductor { l: Inductance::new(value)? },
-        'C' => ComponentKind::Capacitor { c: Capacitance::new(value)? },
+        'R' => ComponentKind::Resistor { r: Resistance::known(value)? },
+        'L' => ComponentKind::Inductor { l: Inductance::known(value)? },
+        'C' => ComponentKind::Capacitor { c: Capacitance::known(value)? },
         'V' => {
             // Check for AC/DC specification
             let v = if tokens.len() >= 5 && tokens[4].to_uppercase() == "AC" {

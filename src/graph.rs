@@ -1,6 +1,6 @@
 use num_complex::Complex64;
 use crate::component::ComponentKind;
-use crate::units::AngularFrequency;
+use crate::units::{AngularFrequency, ImpedanceResult};
 
 pub type NodeIndex = usize;
 pub type ComponentIndex = usize;
@@ -17,7 +17,7 @@ pub struct CircuitComponent {
     pub kind: ComponentKind,
     pub nodes: (NodeIndex, NodeIndex),
     pub is_active: bool,
-    pub cached_impedance: Complex64,
+    pub cached_impedance: ImpedanceResult,
 }
 
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ impl CircuitGraph {
             kind,
             nodes,
             is_active: true,
-            cached_impedance: Complex64::new(0.0, 0.0),
+            cached_impedance:  ImpedanceResult::Finite(Complex64::new(0.0, 0.0)),
         });
         idx
     }
