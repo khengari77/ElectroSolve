@@ -28,12 +28,12 @@ pub fn reduce(graph: &mut CircuitGraph, omega: AngularFrequency) -> Result<Vec<R
     graph.cache_impedances(omega);
     loop {
         if let Some(mut step) = find_series_reduction(graph) {
-            apply_reduction(graph, &mut step);
+            apply_reduction(graph, &mut step)?;
             steps.push(step);
             continue;
         }
         if let Some(mut step) = find_parallel_reduction(graph) {
-            apply_reduction(graph, &mut step);
+            apply_reduction(graph, &mut step)?;
             steps.push(step);
             continue;
         }
@@ -44,9 +44,8 @@ pub fn reduce(graph: &mut CircuitGraph, omega: AngularFrequency) -> Result<Vec<R
 
 fn find_series_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
     for node_idx in 0..graph.nodes.len() {
-        let node = &graph.nodes[node_idx];
         
-        if node.degree != 2 {
+        if graph.get_node_degree(node_idx) != 2 {
             continue;
         }
         
@@ -133,8 +132,6 @@ fn apply_reduction(graph: &mut CircuitGraph, step: &mut ReductionStep) -> Result
             for comp_idx in components {
                 graph.components[*comp_idx].is_active = false;
                 let nodes = graph.components[*comp_idx].nodes;
-                graph.nodes[nodes.0].degree -= 1;
-                graph.nodes[nodes.1].degree -= 1;
             }
             
             let kind = impedance_to_kind(impedance.clone())?;
@@ -151,8 +148,6 @@ fn apply_reduction(graph: &mut CircuitGraph, step: &mut ReductionStep) -> Result
             for comp_idx in components {
                 graph.components[*comp_idx].is_active = false;
                 let c_nodes = graph.components[*comp_idx].nodes;
-                graph.nodes[c_nodes.0].degree -= 1;
-                graph.nodes[c_nodes.1].degree -= 1;
             }
             
             let kind = impedance_to_kind(impedance.clone())?;

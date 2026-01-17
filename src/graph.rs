@@ -8,7 +8,6 @@ pub type ComponentIndex = usize;
 #[derive(Debug, Clone)]
 pub struct Node {
     pub id: String,
-    pub degree: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -25,6 +24,7 @@ pub struct CircuitGraph {
     pub nodes: Vec<Node>,
     pub components: Vec<CircuitComponent>,
     pub ground: Option<NodeIndex>,
+    adjacency: Vec<Vec<ComponentIndex>>,
 }
 
 impl CircuitGraph {
@@ -33,12 +33,13 @@ impl CircuitGraph {
             nodes: Vec::new(),
             components: Vec::new(),
             ground: None,
+            adjacency: Vec::new(),
         }
     }
 
     pub fn add_node(&mut self, id: String) -> NodeIndex {
         let idx = self.nodes.len();
-        self.nodes.push(Node { id, degree: 0 });
+        self.nodes.push(Node { id });
         idx
     }
     
@@ -48,8 +49,6 @@ impl CircuitGraph {
 
     pub fn add_component(&mut self, id: String, kind: ComponentKind, nodes: (NodeIndex, NodeIndex)) -> ComponentIndex {
         debug_assert!(nodes.0 < self.nodes.len() && nodes.1 < self.nodes.len());
-        self.nodes[nodes.0].degree += 1;
-        self.nodes[nodes.1].degree += 1;
         let idx = self.components.len();
         self.components.push(CircuitComponent {
             id,
@@ -58,6 +57,12 @@ impl CircuitGraph {
             is_active: true,
             cached_impedance:  ImpedanceResult::Finite(Complex64::new(0.0, 0.0)),
         });
+        while self.adjacency.len() <= nodes.0.max(nodes.1) {
+            self.adjacency.push(Vec::new());
+        }
+        self.adjacency[nodes.0].push(idx);
+        self.adjacency[nodes.1].push(idx);
+        
         idx
     }
 
@@ -66,12 +71,18 @@ impl CircuitGraph {
     }
 
     pub fn connections_at(&self, idx: NodeIndex) -> Vec<ComponentIndex> {
-        self.components
+        self.adjacency[idx]
             .iter()
-            .enumerate()
-            .filter(|(_, c)| c.is_active && (c.nodes.0 == idx || c.nodes.1 == idx))
-            .map(|(i, _)| i)
+            .filter(|&comp_idx| self.components[*comp_idx].is_active)
+            .copied()
             .collect()
+    }
+
+    pub fn get_node_degree(&self, idx: NodeIndex) -> usize {
+        self.adjacency[idx]
+            .iter()
+            .filter(|&comp_idx| self.components[*comp_idx].is_active)
+            .count()
     }
 
     pub fn active_component_count(&self) -> usize {
