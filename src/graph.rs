@@ -16,7 +16,7 @@ pub struct CircuitComponent {
     pub kind: ComponentKind,
     pub nodes: (NodeIndex, NodeIndex),
     pub is_active: bool,
-    pub cached_impedance: ImpedanceResult,
+    pub cached_impedance: Option<ImpedanceResult>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +55,7 @@ impl CircuitGraph {
             kind,
             nodes,
             is_active: true,
-            cached_impedance:  ImpedanceResult::Finite(Complex64::new(0.0, 0.0)),
+            cached_impedance:  None,
         });
         while self.adjacency.len() <= nodes.0.max(nodes.1) {
             self.adjacency.push(Vec::new());
@@ -92,7 +92,7 @@ impl CircuitGraph {
     pub fn cache_impedances(&mut self, omega: AngularFrequency) {
         for c in self.components.iter_mut() {
             if c.is_active {
-                c.cached_impedance = c.kind.impedance(omega);
+                c.cached_impedance = Some(c.kind.impedance(omega));
             }
         }
     }

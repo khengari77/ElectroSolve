@@ -3,8 +3,18 @@ name = "ElectroSolve"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "electro_solve"
+path = "src/lib.rs"
+
 [dependencies]
 nalgebra = "0.34.1"
 num-complex = "0.4.6"
 thiserror = "2.0.17"
-clap = { version = "4.5.54", features = ["derive"] } 
+clap = { version = "4.5.54", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1.9"
+approx = "0.5.1"
+#cargo-tarpaulin = "0.35.1"  # Temporarily disabled - compatibility issue with Edition 2024
+

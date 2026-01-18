@@ -67,8 +67,8 @@ fn find_series_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
         
         // Use combine_series helper
         let z_eq = combine_series(
-            comp1.cached_impedance.clone(),
-            comp2.cached_impedance.clone(),
+            comp1.cached_impedance.clone()?,
+            comp2.cached_impedance.clone()?,
         );
         
         // Return reduction even if result is Open/Short
@@ -104,7 +104,7 @@ fn find_parallel_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
     let impedances: Vec<ImpedanceResult> = best_indices
         .iter()
         .map(|&idx| graph.components[idx].cached_impedance.clone())
-        .collect();
+        .collect::<Option<Vec<_>>>()?;
     
     let z_eq = combine_parallel_many(&impedances);
     

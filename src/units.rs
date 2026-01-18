@@ -209,6 +209,15 @@ impl ImpedanceResult {
     pub fn is_finite(&self) -> bool { matches!(self, Self::Finite(..)) }
     pub fn is_open(&self) -> bool { matches!(self, Self::Open) }
     pub fn is_short(&self) -> bool { matches!(self, Self::Short) }
+
+    pub fn new_finite(z: Complex64) -> Self {
+        const EPSILON: f64 = 1e-12;
+        if z.norm() < EPSILON {
+            Self::Short
+        } else {
+            Self::Finite(z)
+        }
+    }
 }
 
 
@@ -219,11 +228,11 @@ pub fn combine_series(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceResu
         }
         
         (ImpedanceResult::Finite(z1_val), ImpedanceResult::Short)  => { 
-            ImpedanceResult::Finite(*z1_val)
+            ImpedanceResult::new_finite(*z1_val)
         }
         
         (ImpedanceResult::Short, ImpedanceResult::Finite(z2_val))  => { 
-            ImpedanceResult::Finite(*z2_val)
+            ImpedanceResult::new_finite(*z2_val)
         }
 
         (ImpedanceResult::Short, ImpedanceResult::Short) => {
@@ -231,7 +240,7 @@ pub fn combine_series(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceResu
         }
         
         (ImpedanceResult::Finite(z1_val), ImpedanceResult::Finite(z2_val)) => {
-            ImpedanceResult::Finite(z1_val + z2_val)
+            ImpedanceResult::new_finite(z1_val + z2_val)
         }
     }
 }
@@ -243,10 +252,10 @@ pub fn combine_parallel(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceRe
         }
         
         (ImpedanceResult::Finite(z1_val), ImpedanceResult::Open) => {
-            ImpedanceResult::Finite(*z1_val)
+            ImpedanceResult::new_finite(*z1_val)
         }
         (ImpedanceResult::Open, ImpedanceResult::Finite(z2_val)) => {
-            ImpedanceResult::Finite(*z2_val)
+            ImpedanceResult::new_finite(*z2_val)
         }
         (ImpedanceResult::Open, ImpedanceResult::Open) => {
             ImpedanceResult::Open
@@ -254,7 +263,7 @@ pub fn combine_parallel(z1: ImpedanceResult, z2: ImpedanceResult) -> ImpedanceRe
         
         (ImpedanceResult::Finite(z1_val), ImpedanceResult::Finite(z2_val)) => {
             let admittance_sum = 1.0 / z1_val + 1.0 / z2_val;
-            ImpedanceResult::Finite(1.0 / admittance_sum)
+            ImpedanceResult::new_finite(1.0 / admittance_sum)
         }
     }
 }
@@ -286,7 +295,7 @@ pub fn combine_parallel_many(impedances: &[ImpedanceResult]) -> ImpedanceResult 
         .map(|z| 1.0 / z)  // Y = 1/Z
         .sum();
     
-    ImpedanceResult::Finite(1.0 / admittance_sum)
+    ImpedanceResult::new_finite(1.0 / admittance_sum)
 }
 
 pub fn combine_series_many(impedances: &[ImpedanceResult]) -> ImpedanceResult {
@@ -308,7 +317,7 @@ pub fn combine_series_many(impedances: &[ImpedanceResult]) -> ImpedanceResult {
     
     // If all were Open (shouldn't happen given first check, but defensive)
     if finite_vals.is_empty() {
-        return ImpedanceResult::Open;
+        return ImpedanceResult::Short;
     }
     
     // Rule 2: Sum all finite values
@@ -316,5 +325,5 @@ pub fn combine_series_many(impedances: &[ImpedanceResult]) -> ImpedanceResult {
         .iter()
         .sum();
     
-    ImpedanceResult::Finite(z_sum)
+    ImpedanceResult::new_finite(z_sum)
 }

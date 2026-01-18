@@ -17,13 +17,13 @@ impl ComponentKind {
         match self {
             Self::Resistor {r} => {
                 match Option::<f64>::from(r.clone()) {
-                    Some(r_val) => ImpedanceResult::Finite(Complex64::new(r_val, 0.0)),
+                    Some(r_val) => ImpedanceResult::new_finite(Complex64::new(r_val, 0.0)),
                     None => ImpedanceResult::Open,
                 }
             }
             Self::Inductor {l} => {
                 match Option::<f64>::from(l.clone()) {
-                    Some(l_val) => ImpedanceResult::Finite(Complex64::new(0.0, f64::from(omega) * l_val)),
+                    Some(l_val) => ImpedanceResult::new_finite(Complex64::new(0.0, f64::from(omega) * l_val)),
                     None => ImpedanceResult::Open,
                 }
             }
@@ -34,7 +34,7 @@ impl ComponentKind {
                         if omega_val < 1e-12 {
                             ImpedanceResult::Open
                         } else {
-                            ImpedanceResult::Finite(Complex64::new(0.0, -1.0 / (omega_val * c_val)))
+                            ImpedanceResult::new_finite(Complex64::new(0.0, -1.0 / (omega_val * c_val)))
                         }
                     },
                     None => ImpedanceResult::Open,
@@ -66,7 +66,7 @@ pub fn impedance_to_kind(z: ImpedanceResult) -> Result<ComponentKind, CircuitErr
             if z_val.im.abs() < EPSILON {
                 Resistance::known(z_val.re).map(|r| ComponentKind::Resistor { r })
             } else {
-                Ok(ComponentKind::Impedance { z: ImpedanceResult::Finite(z_val) })
+                Ok(ComponentKind::Impedance { z: ImpedanceResult::new_finite(z_val) })
             }
         }
         ImpedanceResult::Open => Ok(ComponentKind::Impedance { z: ImpedanceResult::Open }),
