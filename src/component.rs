@@ -2,7 +2,7 @@ use num_complex::Complex64;
 use crate::units::*;
 use crate::errors::CircuitError;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ComponentKind {
     Resistor {r: Resistance},
     Inductor  {l: Inductance},

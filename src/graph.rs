@@ -1,4 +1,3 @@
-use num_complex::Complex64;
 use crate::component::ComponentKind;
 use crate::units::{AngularFrequency, ImpedanceResult};
 
