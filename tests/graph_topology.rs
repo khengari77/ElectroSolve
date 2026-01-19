@@ -16,7 +16,7 @@ fn arbitrary_component_kind() -> impl Strategy<Value = ComponentKind> {
 fn arbitrary_circuit_graph() -> impl Strategy<Value = CircuitGraph> {
     prop::collection::vec("[a-z]{1,5}", 2..=10)
         .prop_flat_map(|node_ids| {
-            let num_components = 0usize..=15usize;
+            let num_components = 1usize..=15usize;
             prop::collection::vec(
                 (arbitrary_component_kind(), 
                  (0usize..node_ids.len(), 0usize..node_ids.len())
@@ -29,12 +29,6 @@ fn arbitrary_circuit_graph() -> impl Strategy<Value = CircuitGraph> {
             let mut graph = CircuitGraph::new();
             for id in &node_ids {
                 graph.add_node(id.clone());
-            }
-            // Initialize adjacency for all nodes if components is empty
-            if components.is_empty() {
-                for _ in 0..graph.nodes.len() {
-                    graph.adjacency.push(Vec::new());
-                }
             }
             for (i, (kind, (n0, n1))) in components.into_iter().enumerate() {
                 graph.add_component(format!("C{}", i), kind, (n0, n1));

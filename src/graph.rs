@@ -39,6 +39,7 @@ impl CircuitGraph {
     pub fn add_node(&mut self, id: String) -> NodeIndex {
         let idx = self.nodes.len();
         self.nodes.push(Node { id });
+        self.adjacency.push(Vec::new()); 
         idx
     }
     
@@ -56,9 +57,6 @@ impl CircuitGraph {
             is_active: true,
             cached_impedance:  None,
         });
-        while self.adjacency.len() <= nodes.0.max(nodes.1) {
-            self.adjacency.push(Vec::new());
-        }
         self.adjacency[nodes.0].push(idx);
         self.adjacency[nodes.1].push(idx);
         
