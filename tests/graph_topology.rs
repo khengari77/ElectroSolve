@@ -3,39 +3,8 @@ use electro_solve::units::*;
 use electro_solve::graph::*;
 use electro_solve::component::*;
 
-fn arbitrary_component_kind() -> impl Strategy<Value = ComponentKind> {
-    prop_oneof![
-        (1e-12_f64..1e12_f64).prop_map(|r| ComponentKind::Resistor{r: Resistance::known(r).unwrap()}),
-        (1e-12_f64..1e12_f64).prop_map(|l| ComponentKind::Inductor{l: Inductance::known(l).unwrap()}),
-        (1e-12_f64..1e12_f64).prop_map(|c| ComponentKind::Capacitor{c: Capacitance::known(c).unwrap()}),
-        (1e-12_f64..1e12_f64).prop_map(|v| ComponentKind::VoltageSource{v: Voltage::dc(v)}),
-        (1e-12_f64..1e12_f64).prop_map(|i| ComponentKind::CurrentSource{i: Current::dc(i)}),
-    ]
-}
-
-fn arbitrary_circuit_graph() -> impl Strategy<Value = CircuitGraph> {
-    prop::collection::vec("[a-z]{1,5}", 2..=10)
-        .prop_flat_map(|node_ids| {
-            let num_components = 1usize..=15usize;
-            prop::collection::vec(
-                (arbitrary_component_kind(), 
-                 (0usize..node_ids.len(), 0usize..node_ids.len())
-                    .prop_filter("distinct nodes", |(n0, n1)| n0 != n1)),
-                num_components
-            )
-            .prop_map(move |components| (node_ids.clone(), components))
-        })
-        .prop_map(|(node_ids, components)| {
-            let mut graph = CircuitGraph::new();
-            for id in &node_ids {
-                graph.add_node(id.clone());
-            }
-            for (i, (kind, (n0, n1))) in components.into_iter().enumerate() {
-                graph.add_component(format!("C{}", i), kind, (n0, n1));
-            }
-            graph
-        })
-}
+mod common;
+use common::strategies::*;
 
 proptest! {
 
@@ -147,7 +116,7 @@ fn prop_ground_is_unique(
 fn prop_active_component_count_matches_filter(
     graph in arbitrary_circuit_graph()
 ) {
-    let count = graph.active_component_count();
+    let count: usize = graph.active_component_count();
     let filtered_count = graph.components.iter()
         .filter(|c| c.is_active)
         .count();
@@ -158,7 +127,7 @@ fn prop_cache_impedances_updates_all_active(
     graph in arbitrary_circuit_graph(),
     omega in 1.0_f64..1e6_f64
 ) {
-    let mut graph = graph;
+    let mut graph: CircuitGraph = graph;
     graph.cache_impedances(AngularFrequency::new(omega).unwrap());
     for component in &graph.components {
         if component.is_active {
@@ -171,7 +140,7 @@ fn prop_cache_impedances_skips_inactive(
     graph in arbitrary_circuit_graph(),
     omega in 1.0_f64..1e6_f64
 ) {
-    let mut graph = graph;
+    let mut graph: CircuitGraph = graph;
     graph.cache_impedances(AngularFrequency::new(omega).unwrap());
     for component in &graph.components {
         if !component.is_active {
@@ -188,7 +157,7 @@ fn prop_deactivating_component_reduces_count(
             (Just(graph), 0usize..comp_count)  // Generate graph first, then index
         })
 ) {
-    let (mut graph, comp_idx) = input;
+    let (mut graph, comp_idx): (CircuitGraph, usize) = input;
     let before_count = graph.active_component_count();
     graph.components[comp_idx].is_active = false;
     let after_count = graph.active_component_count();

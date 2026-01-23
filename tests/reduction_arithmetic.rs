@@ -5,15 +5,7 @@ use electro_solve::units::*;
 
 mod common;
 use common::*;
-
-
-fn impedance_strategy() -> impl Strategy<Value = ImpedanceResult> {
-    prop_oneof![
-        (1e-12_f64..1e12_f64, -1e12_f64..1e12_f64)
-            .prop_map(|(re, im)| ImpedanceResult::new_finite(Complex64::new(re, im)))
-            .boxed(),
-    ]
-}
+use common::strategies::*;
 
 proptest! {
 

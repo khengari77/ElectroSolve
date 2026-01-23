@@ -5,16 +5,19 @@ use crate::component::impedance_to_kind;
 use crate::errors::CircuitError;
 
 
+#[derive(Clone)]
 pub enum ReductionStep {
     Series{
         components: Vec<ComponentIndex>,
         equivalent: ComponentIndex,
         impedance: ImpedanceResult,
+        nodes: (NodeIndex, NodeIndex),
     },
     Parallel{
         components: Vec<ComponentIndex>,
         equivalent: ComponentIndex,
         impedance: ImpedanceResult,
+        nodes: (NodeIndex, NodeIndex),
     },
     DeltaWye {
         delta_nodes: (NodeIndex, NodeIndex, NodeIndex),
@@ -64,6 +67,15 @@ fn find_series_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
         if !comp1.kind.is_passive() || !comp2.kind.is_passive() {
             continue;
         }
+            
+        let middle_idx = if comp1.nodes.0 == comp2.nodes.0 || comp1.nodes.0 == comp2.nodes.1 {
+            comp1.nodes.0
+        } else {
+            comp1.nodes.1
+        };
+            
+        let outer1 = if comp1.nodes.0 != middle_idx { comp1.nodes.0 } else { comp1.nodes.1 };
+        let outer2 = if comp2.nodes.0 != middle_idx { comp2.nodes.0 } else { comp2.nodes.1 };
         
         // Use combine_series helper
         let z_eq = combine_series(
@@ -76,6 +88,7 @@ fn find_series_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
             components: vec![comp1_idx, comp2_idx],
             equivalent: 0,
             impedance: z_eq,
+            nodes: (outer1, outer2),
         });
     }
     None
@@ -96,7 +109,7 @@ fn find_parallel_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
     
         parallel_groups.entry(key).or_default().push(idx);
     }
-    let (_, best_indices) = parallel_groups
+    let (nodes, best_indices) = parallel_groups
         .into_iter()
         .filter(|(_, indices)| indices.len() > 1)
         .max_by_key(|(_, indices)| indices.len())?;
@@ -112,51 +125,26 @@ fn find_parallel_reduction(graph: &CircuitGraph) -> Option<ReductionStep> {
         components: best_indices,
         equivalent: 0,
         impedance: z_eq,
+        nodes,
     });
 }
 
 fn apply_reduction(graph: &mut CircuitGraph, step: &mut ReductionStep) -> Result<ComponentIndex, CircuitError> {
     match step {
-        ReductionStep::Series { components, impedance, equivalent } => {
-            let comp1 = &graph.components[components[0]];
-            let comp2 = &graph.components[components[1]];
-            
-            let middle_idx = if comp1.nodes.0 == comp2.nodes.0 || comp1.nodes.0 == comp2.nodes.1 {
-                comp1.nodes.0
-            } else {
-                comp1.nodes.1
-            };
-            let outer1 = if comp1.nodes.0 != middle_idx { comp1.nodes.0 } else { comp1.nodes.1 };
-            let outer2 = if comp2.nodes.0 != middle_idx { comp2.nodes.0 } else { comp2.nodes.1 };
-            
+        ReductionStep::Series { components, impedance, equivalent, nodes} | 
+        ReductionStep::Parallel { components, impedance, equivalent, nodes}
+            => {
             for comp_idx in components {
                 graph.components[*comp_idx].is_active = false;
-                let nodes = graph.components[*comp_idx].nodes;
             }
             
             let kind = impedance_to_kind(impedance.clone())?;
-            let new_comp_idx = graph.add_component("EQ".to_string(), kind, (outer1, outer2));
+            let new_comp_idx = graph.add_component("EQ".to_string(), kind, *nodes);
             
+            graph.components[new_comp_idx].cached_impedance = Some(impedance.clone());
             *equivalent = new_comp_idx;
             Ok(new_comp_idx)
         }
-        
-        ReductionStep::Parallel { components, impedance, equivalent } => {
-            let comp = &graph.components[components[0]];
-            let nodes = comp.nodes;
-            
-            for comp_idx in components {
-                graph.components[*comp_idx].is_active = false;
-                let c_nodes = graph.components[*comp_idx].nodes;
-            }
-            
-            let kind = impedance_to_kind(impedance.clone())?;
-            let new_comp_idx = graph.add_component("EQ".to_string(), kind, nodes);
-            
-            *equivalent = new_comp_idx;
-            Ok(new_comp_idx)
-        }
-        
         _ => panic!("apply_reduction called with unimplemented reduction type")
     }
 }

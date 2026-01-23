@@ -3,23 +3,8 @@ use proptest::prelude::*;
 use num_complex::Complex64;
 
 mod common;
-use common::*;
-
-fn is_passive_impedance_result(z: &ImpedanceResult) -> bool {
-    match z {
-        ImpedanceResult::Finite(z_val) => is_passive_impedance(*z_val),
-        ImpedanceResult::Short => true,
-        ImpedanceResult::Open => true,
-    }
-}
-
-fn impedance_strategy() -> impl Strategy<Value = ImpedanceResult> {
-    prop_oneof![
-        (1e-12_f64..1e12_f64, -1e12_f64..1e12_f64)
-            .prop_map(|(re, im)| ImpedanceResult::new_finite(Complex64::new(re, im)))
-            .boxed(),
-    ]
-}
+use common::is_passive_impedance_result;
+use common::strategies::*;
 
 proptest! {
 

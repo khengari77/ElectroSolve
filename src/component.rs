@@ -60,7 +60,7 @@ impl ComponentKind {
 }
 
 pub fn impedance_to_kind(z: ImpedanceResult) -> Result<ComponentKind, CircuitError> {
-    const EPSILON: f64 = 1e-12;
+    const EPSILON: f64 = 1e-16;
     match z {
         ImpedanceResult::Finite(z_val) => {
             if z_val.im.abs() < EPSILON {

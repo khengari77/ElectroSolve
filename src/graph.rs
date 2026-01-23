@@ -94,6 +94,10 @@ impl CircuitGraph {
         }
     }
 
+    pub fn len_adjacency(&self) -> usize {
+        self.adjacency.len()
+    }
+
     pub fn set_ground(&mut self, idx: NodeIndex) {
         self.ground = Some(idx);
     }
