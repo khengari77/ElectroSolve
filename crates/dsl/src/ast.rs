@@ -14,8 +14,6 @@ pub struct Program {
 pub enum Analysis {
     AC { frequency_hz: f64, ac_ref: AcRef },
     DC,
-    Transient { start_time: f64, end_time: f64, step: f64 },
-    AC Sweep { start_freq: f64, end_freq: f64, points: usize, sweep_type: SweepType },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,16 +135,6 @@ impl Program {
         self.constraints.iter().any(|c| requires_ground_expr(&c.lhs) || requires_ground_expr(&c.rhs)) ||
         self.solve.iter().any(|s| requires_ground_solve_target(s))
     }
-
-    pub fn validate(&self) -> Result<(), ValidationError> {
-
-        if self.requires_ground() && self.ground.is_none() {
-            return Err(ValidationError::GroundRequired);
-        }
-
-
-
-        Ok(())
 }
 
 fn requires_ground_expr(expr: &Expr) -> bool {
