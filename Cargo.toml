@@ -1,19 +1,17 @@
-[package]
-name = "ElectroSolve"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = [
+    "crates/core",
+    "crates/dsl",
+    "crates/cli",
+]
 
-[lib]
-name = "electro_solve"
-path = "src/lib.rs"
-
-[dependencies]
+[workspace.dependencies]
 nalgebra = "0.34.1"
 num-complex = "0.4.6"
 thiserror = "2.0.17"
 clap = { version = "4.5.54", features = ["derive"] }
-
-[dev-dependencies]
-proptest = "1.9"
 approx = "0.5.1"
-
+proptest = "1.9"
+chumsky = "0.9.3"
+miette = { version = "7.2", features = ["fancy"] }

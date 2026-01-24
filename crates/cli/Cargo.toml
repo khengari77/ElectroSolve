@@ -1,0 +1,10 @@
+[package]
+name = "electro_solve_cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+electro_solve_core = { path = "../core" }
+electro_solve_dsl = { path = "../dsl" }
+clap.workspace = true
+thiserror.workspace = true
