@@ -115,51 +115,6 @@ pub fn is_passive_impedance(z: Complex64) -> bool {
     z.re >= 0.0
 }
 
-pub fn calculate_equivalent_impedance(graph: &CircuitGraph, omega: AngularFrequency) -> ImpedanceResult {
-    // For now, assume simple series-parallel - we'll improve this later
-    // This is a placeholder for actual circuit analysis
-    if graph.components.is_empty() {
-        return ImpedanceResult::Open;
-    }
-    
-    // Simple approach: find first active component
-    for comp in &graph.components {
-        if comp.is_active {
-            if let Some(z) = &comp.cached_impedance {
-                return z.clone();
-            }
-        }
-    }
-    
-    ImpedanceResult::Open
-}
-
-pub fn build_series_chain(graph: &mut CircuitGraph, values: &[f64]) -> Vec<usize> {
-    let mut indices = Vec::new();
-    for (i, &val) in values.iter().enumerate() {
-        graph.add_node(format!("n{}", i));
-        if i > 0 {
-            indices.push(create_resistor(graph, &format!("R{}", i), val, i-1, i));
-        }
-    }
-    indices
-}
-
-pub fn create_resistor(graph: &mut CircuitGraph, id: &str, r: f64, n1: usize, n2: usize) -> usize {
-    let kind = ComponentKind::Resistor {
-        r: Resistance::known(r).unwrap()
-    };
-    graph.add_component(id.to_string(), kind, (n1, n2))
-}
-
-pub fn series_impedance(values: &[f64]) -> ImpedanceResult {
-    let impedances: Vec<_> = values.iter()
-        .map(|&r| ImpedanceResult::new_finite(Complex64::new(r, 0.0)))
-        .collect();
-    combine_series_many(&impedances)
-}
-
-
 pub fn is_passive_impedance_result(z: &ImpedanceResult) -> bool {
     match z {
         ImpedanceResult::Finite(z_val) => is_passive_impedance(*z_val),

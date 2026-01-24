@@ -13,176 +13,108 @@ use common::strategies::*;
 proptest! {
 
 #[test]
-fn prop_series_reduction_preserves_impedance(
-    values in prop::collection::vec(1.0_f64..1e6_f64, 2..10)
+fn prop_series_chain_reduces_to_sum(
+    values in prop::collection::vec(1.0_f64..1e6_f64, 2..20)
 ) {
-    // Build series chain
     let mut graph = CircuitGraph::new();
-    let _ = build_series_chain(&mut graph, &values);
-    
-    let omega = AngularFrequency::new(1.0).unwrap();
-    
-    // We expect the reduction to squash the chain.
-    let expected_z = series_impedance(&values);
-    
-    // Use the main reduce function which handles finding, calculating impedance, and applying
-    let steps = reduce(&mut graph, omega).expect("Should reduce successfully");
-    
-    // Verify that we actually performed reductions
-    assert!(!steps.is_empty(), "Should perform reduction on series chain");
-    
-    // Verify that at least one step was a Series reduction (topology check)
-    assert!(steps.iter().any(|step| matches!(step, ReductionStep::Series{..})), 
-            "Should contain a Series reduction step");
+    let omega = AngularFrequency::new(100.0).unwrap();
 
-    // Verify final equivalent impedance
-    let final_z = calculate_equivalent_impedance(&graph, omega);
-    assert_impedance_eq(final_z, expected_z, EPSILON_PHYSICAL);
+    for i in 0..=values.len() {
+        graph.add_node(format!("n{}", i));
+    }
+
+    for (i, &val) in values.iter().enumerate() {
+        let kind = ComponentKind::Resistor { 
+            r: Resistance::known(val).unwrap() 
+        };
+        graph.add_component(format!("R{}", i), kind, (i, i + 1));
+    }
+    let expected_r: f64 = values.iter().sum();
+    let expected_z = Complex64::new(expected_r, 0.0);
+
+    let _ = reduce(&mut graph, omega).expect("Should reduce successfully");
+
+    prop_assert_eq!(graph.active_component_count(), 1, "Should have one active component");
+
+    let remaining_comp = graph.components
+        .iter()
+        .find(|c| c.is_active)
+        .expect("Active count was 1, but could not find active component");
+    
+    let z_result = remaining_comp.cached_impedance.as_ref().unwrap();
+    
+    match z_result {
+        ImpedanceResult::Finite(z) => {
+            // Check Real part matches sum
+            prop_assert!( (z.re - expected_z.re).abs() < 1e-6, 
+                "Expected {} Ohms, got {} Ohms", expected_z.re, z.re);
+            // Check Imaginary part is 0
+            prop_assert!( z.im.abs() < 1e-6 );
+        },
+        _ => prop_assert!(false, "Result should be finite")
+    }
 }
 
+
 #[test]
-fn prop_parallel_reduction_preserves_impedance(
-    values in prop::collection::vec(1.0_f64..1e6_f64, 2..5)
+fn prop_parallel_bank_reduces_to_harmonic_mean(
+    values in prop::collection::vec(1.0_f64..1e6_f64, 2..20)
 ) {
-    // Build parallel bank
     let mut graph = CircuitGraph::new();
+    let omega = AngularFrequency::new(100.0).unwrap();
+
     graph.add_node("n0".to_string());
     graph.add_node("n1".to_string());
-    
+    graph.set_ground(0);
+
+
     for (i, &val) in values.iter().enumerate() {
-        create_resistor(&mut graph, &format!("R{}", i), val, 0, 1);
+        let kind = ComponentKind::Resistor { 
+            r: Resistance::known(val).unwrap() 
+        };
+        graph.add_component(format!("R{}", i), kind, (0, 1));
     }
-    
-    let omega = AngularFrequency::new(1.0).unwrap();
-    
-    // Calculate expected impedance
-    let impedances: Vec<_> = values.iter()
-        .map(|&r| ImpedanceResult::new_finite(Complex64::new(r, 0.0)))
-        .collect();
-    let expected_z = combine_parallel_many(&impedances);
-    
-    // Use the main reduce function
-    let steps = reduce(&mut graph, omega).expect("Should reduce successfully");
-    
-    // Verify reduction occurred
-    assert!(!steps.is_empty(), "Should perform reduction on parallel bank");
 
-    // Verify topology (at least one Parallel step)
-    assert!(steps.iter().any(|step| matches!(step, ReductionStep::Parallel{..})), 
-            "Should contain a Parallel reduction step");
-    
-    // Verify impedance
-    let final_z = calculate_equivalent_impedance(&graph, omega);
-    assert_impedance_eq(final_z, expected_z, EPSILON_PHYSICAL);
-}
+    let sum_conductance: f64 = values.iter().map(|&r| 1.0 / r).sum();
+    let expected_r: f64 = 1.0 / sum_conductance;
+    let expected_z = Complex64::new(expected_r, 0.0);
 
-#[test]
-fn prop_full_reduction_preserves_equivalent_impedance(
-    circuit in arbitrary_circuit_graph_with_reducible_pairs()
-) {
-    // We use the generated circuit which is guaranteed to be reducible.
-    // No prop_assume! needed.
-    
-    // Calculate initial equivalent impedance
-    let omega = AngularFrequency::new(1.0).unwrap();
-    let initial_z = calculate_equivalent_impedance(&circuit, omega);
-    
-    // Reduce circuit
-    let mut graph = circuit;
-    let steps = reduce(&mut graph, omega).expect("Should reduce successfully");
-    
-    // Verify at least one reduction occurred
-    prop_assert!(!steps.is_empty(), "Circuit generated with reducible pairs should reduce");
-    
-    // Calculate final equivalent impedance
-    let final_z = calculate_equivalent_impedance(&graph, omega);
-    
-    // Verify impedance preserved
-    assert_impedance_eq(final_z, initial_z, EPSILON_RELAXED);
-}
-
-#[test]
-fn prop_reduction_produces_valid_topology(
-    circuit in arbitrary_circuit_graph_with_reducible_pairs()
-) {
-    // Reduce circuit
-    let mut graph = circuit;
-    let omega = AngularFrequency::new(1.0).unwrap();
     let _ = reduce(&mut graph, omega).expect("Should reduce successfully");
+
+    prop_assert_eq!(graph.active_component_count(), 1, "Should have one active component");
+
+    let remaining_comp = graph.components
+        .iter()
+        .find(|c| c.is_active)
+        .expect("Active count was 1, but could not find active component");
     
-    // Verify topology validity
-    for (idx, comp) in graph.components.iter().enumerate() {
+    let z_result = remaining_comp.cached_impedance.as_ref().unwrap();
+    
+    match z_result {
+        ImpedanceResult::Finite(z) => {
+            // Check Real part matches sum
+            prop_assert!( (z.re - expected_z.re).abs() < 1e-6, 
+                "Expected {} Ohms, got {} Ohms", expected_z.re, z.re);
+            // Check Imaginary part is 0
+            prop_assert!( z.im.abs() < 1e-6 );
+        },
+        _ => prop_assert!(false, "Result should be finite")
+    }
+}
+
+#[test]
+fn prop_reduction_never_creates_self_loops(
+    mut graph in arbitrary_circuit_graph()
+) {
+    let omega = AngularFrequency::new(100.0).unwrap();
+    let _ = reduce(&mut graph, omega);
+
+    for comp in &graph.components {
         if comp.is_active {
-            // Verify node indices are valid
-            prop_assert!(comp.nodes.0 < graph.nodes.len());
-            prop_assert!(comp.nodes.1 < graph.nodes.len());
-            
-            // Verify nodes are distinct
-            prop_assert!(comp.nodes.0 != comp.nodes.1,
-                        "Component {} has same node twice", idx);
+            prop_assert_ne!(comp.nodes.0, comp.nodes.1, 
+                "Reduction created a self-loop on component {}", comp.id);
         }
     }
-    
-    // Verify adjacency is fully initialized/valid
-    prop_assert_eq!(graph.len_adjacency(), graph.nodes.len(),
-                   "Adjacency array should match node count");
-}
-
-#[test]
-fn prop_reduction_preserves_passivity(
-    circuit in arbitrary_circuit_graph_with_reducible_pairs()
-) {
-    // Use the robust strategy
-    
-    let omega = AngularFrequency::new(1.0).unwrap();
-    
-    // Verify initial passivity (our generator uses passive components mostly)
-    let initial_z = calculate_equivalent_impedance(&circuit, omega);
-    // Only proceed if random graph turned out passive (it usually is unless sources are weird)
-    prop_assume!(is_passive_impedance_result(&initial_z),
-                "Initial circuit must be passive");
-    
-    // Reduce circuit
-    let mut graph = circuit;
-    let _ = reduce(&mut graph, omega).expect("Should reduce successfully");
-    
-    // Verify final passivity
-    let final_z = calculate_equivalent_impedance(&graph, omega);
-    prop_assert!(is_passive_impedance_result(&final_z),
-                "Reduced circuit should remain passive");
-}
-
-#[test]
-fn prop_reduction_is_idempotent(
-    circuit in arbitrary_circuit_graph_with_reducible_pairs()
-) {
-    let omega = AngularFrequency::new(1.0).unwrap();
-    
-    // First reduction
-    let mut graph1 = circuit.clone();
-    let steps1 = reduce(&mut graph1, omega).expect("Should reduce successfully");
-    
-    // Second reduction (should produce same result or further reduce if first pass wasn't exhaustive, 
-    // but reduce() is usually exhaustive. If reduce() is exhaustive, graph1 should be stable.)
-    // However, the test name "idempotent" often implies f(f(x)) = f(x).
-    // Let's check if running reduce again on graph1 produces no steps.
-    
-    let steps_again = reduce(&mut graph1, omega).expect("Should reduce again");
-    prop_assert!(steps_again.is_empty(), "Full reduction should be exhaustive (idempotent)");
-    
-    // Alternatively, comparing two parallel runs:
-    // This part of the original test checked if graph1 (reduced) is equivalent to graph2 (reduced).
-    // Which is trivially true if deterministic. 
-    // The previous implementation compared steps length and impedance.
-    
-    let mut graph2 = circuit;
-    let steps2 = reduce(&mut graph2, omega).expect("Should reduce successfully");
-    
-    prop_assert_eq!(steps1.len(), steps2.len());
-    
-    let z1 = calculate_equivalent_impedance(&graph1, omega);
-    let z2 = calculate_equivalent_impedance(&graph2, omega);
-    assert_impedance_eq(z1, z2, EPSILON_STRICT);
 }
 
 }

@@ -30,12 +30,12 @@ pub fn reduce(graph: &mut CircuitGraph, omega: AngularFrequency) -> Result<Vec<R
     let mut steps = Vec::new();
     graph.cache_impedances(omega);
     loop {
-        if let Some(mut step) = find_series_reduction(graph) {
+        if let Some(mut step) = find_parallel_reduction(graph) {
             apply_reduction(graph, &mut step)?;
             steps.push(step);
             continue;
         }
-        if let Some(mut step) = find_parallel_reduction(graph) {
+        if let Some(mut step) = find_series_reduction(graph) {
             apply_reduction(graph, &mut step)?;
             steps.push(step);
             continue;
@@ -134,6 +134,9 @@ fn apply_reduction(graph: &mut CircuitGraph, step: &mut ReductionStep) -> Result
         ReductionStep::Series { components, impedance, equivalent, nodes} | 
         ReductionStep::Parallel { components, impedance, equivalent, nodes}
             => {
+            if nodes.0 == nodes.1 {
+                return Err(CircuitError::InvalidCircuit("Self loop detected".to_string()));
+            }
             for comp_idx in components {
                 graph.components[*comp_idx].is_active = false;
             }

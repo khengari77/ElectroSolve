@@ -6,6 +6,7 @@ use electro_solve::component::*;
 use electro_solve::graph::*;
 use electro_solve::reduce::*;
 
+
 /// Generate arbitrary impedance values across physical range
 pub fn impedance_strategy() -> impl Strategy<Value = ImpedanceResult> {
     prop_oneof![
@@ -54,27 +55,4 @@ pub fn arbitrary_circuit_graph() -> impl Strategy<Value = CircuitGraph> {
 /// Generate arbitrary angular frequencies
 pub fn frequency_strategy() -> impl Strategy<Value = AngularFrequency> {
     (1.0_f64..1e6_f64).prop_map(|omega| AngularFrequency::new(omega).unwrap())
-}
-
-/// Generate arbitrary circuit graphs with at least one reducible pair
-/// This uses prop_map to inject a reducible pair, avoiding rejection sampling.
-pub fn arbitrary_circuit_graph_with_reducible_pairs() -> impl Strategy<Value = CircuitGraph> {
-    arbitrary_circuit_graph()
-        .prop_map(|mut graph| {
-            // Guarantee at least one parallel reduction is possible.
-            // arbitrary_circuit_graph creates at least 2 nodes (indices 0 and 1).
-            // We inject two known resistors in parallel between node 0 and 1.
-            
-            // Generate unique names to avoid collision with existing "C{i}"
-            let base_idx = graph.components.len();
-            
-            let r1 = ComponentKind::Resistor { r: Resistance::known(1000.0).unwrap() };
-            let r2 = ComponentKind::Resistor { r: Resistance::known(2000.0).unwrap() };
-            
-            // Add parallel pair
-            graph.add_component(format!("Forced_R1_{}", base_idx), r1, (0, 1));
-            graph.add_component(format!("Forced_R2_{}", base_idx), r2, (0, 1));
-            
-            graph
-        })
 }

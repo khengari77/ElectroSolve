@@ -1,6 +1,9 @@
 use num_complex::Complex64;
 use crate::errors::CircuitError;
 
+pub const EPSILON: f64 = 1e-16;
+
+
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Value<T> {
     Known(T),
@@ -211,7 +214,6 @@ impl ImpedanceResult {
     pub fn is_short(&self) -> bool { matches!(self, Self::Short) }
 
     pub fn new_finite(z: Complex64) -> Self {
-        const EPSILON: f64 = 1e-12;
         if z.norm() < EPSILON {
             Self::Short
         } else {
